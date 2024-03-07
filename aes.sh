@@ -49,79 +49,93 @@ aes_expand_key() {
             (( aes_key[i+3] = aes_key[i-N+3] ^ aes_key[i-1] ))
         fi
     done
+
+    for (( i=0; i < 16*aes_rounds; i += 16 )); do
+        (( aes_keysched[i/4] = $(aes_row "aes_key[i]" "aes_key[i + 4]" "aes_key[i + 8]" "aes_key[i + 12]") ))
+        (( aes_keysched[i/4 + 1] = $(aes_row "aes_key[i + 1]" "aes_key[i + 5]" "aes_key[i + 9]" "aes_key[i + 13]") ))
+        (( aes_keysched[i/4 + 2] = $(aes_row "aes_key[i + 2]" "aes_key[i + 6]" "aes_key[i + 10]" "aes_key[i + 14]") ))
+        (( aes_keysched[i/4 + 3] = $(aes_row "aes_key[i + 3]" "aes_key[i + 7]" "aes_key[i + 11]" "aes_key[i + 15]") ))
+    done
 }
 
-aes_sub_shift='
-    local -i t
-    (( aes_block[0] = aes_sbox[aes_block[0]] ))
-    (( aes_block[4] = aes_sbox[aes_block[4]] ))
-    (( aes_block[8] = aes_sbox[aes_block[8]] ))
-    (( aes_block[12] = aes_sbox[aes_block[12]] ))
+aes_row() {
+    echo "$1 | $2 << 8 | $3 << 16 | $4 << 24"
+}
 
-    t=aes_block[1]
-    (( aes_block[1] = aes_sbox[aes_block[5]] ))
-    (( aes_block[5] = aes_sbox[aes_block[9]] ))
-    (( aes_block[9] = aes_sbox[aes_block[13]] ))
-    (( aes_block[13] = aes_sbox[t] ))
+aes_get() {
+    echo "(row$(($1 % 4)) >> $(($1 / 4 * 8)) & 0xff)"
+}
 
-    t=aes_block[2];
-    (( aes_block[2] = aes_sbox[aes_block[10]] ))
-    (( aes_block[10] = aes_sbox[t] ))
-    t=aes_block[6]
-    (( aes_block[6] = aes_sbox[aes_block[14]] ))
-    (( aes_block[14] = aes_sbox[t] ))
+aes_sub() {
+    echo "aes_sbox[$(aes_get $1)]"
+}
 
-    t=aes_block[3]
-    (( aes_block[3] = aes_sbox[aes_block[15]] ))
-    (( aes_block[15] = aes_sbox[aes_block[11]] ))
-    (( aes_block[11] = aes_sbox[aes_block[7]] ))
-    (( aes_block[7] = aes_sbox[t] ))
-'
+aes_subbed() {
+    aes_row "$(aes_sub $1)" "$(aes_sub $2)" "$(aes_sub $3)" "$(aes_sub $4)"
+}
+
+aes_sub_shift() {
+    echo "(( row0 = $(aes_subbed  0  4  8 12) ))"
+    echo "(( row1 = $(aes_subbed  5  9 13  1) ))"
+    echo "(( row2 = $(aes_subbed 10 14  2  6) ))"
+    echo "(( row3 = $(aes_subbed 15  3  7 11) ))"
+}
 
 aes_mix_columns_add_key() {
-    local -i c
-    for (( c=0; c < 4; c++ )); do
+    local -i r
+    for (( r=0; r < 4; r++ )); do
         # This strategy is inspired by the Wikipedia article
         # "Rijndael MixColumns"
         #
         # a contains the input coefficients
         # b contains each coefficient multiplied by x (in GF(2**8), that is)
-        echo "(( a0 = aes_block[$((4*c))] ))"
-        echo "(( a1 = aes_block[$((4*c + 1))] ))"
-        echo "(( a2 = aes_block[$((4*c + 2))] ))"
-        echo "(( a3 = aes_block[$((4*c + 3))] ))"
 
         # NOTE: multiplication just selects between 0x00 and 0x1b here
-        echo "(( b0 = ((a0 >> 7) * 0x1b) ^ (a0 << 1) & 0xff ))"
-        echo "(( b1 = ((a1 >> 7) * 0x1b) ^ (a1 << 1) & 0xff ))"
-        echo "(( b2 = ((a2 >> 7) * 0x1b) ^ (a2 << 1) & 0xff ))"
-        echo "(( b3 = ((a3 >> 7) * 0x1b) ^ (a3 << 1) & 0xff ))"
-
-        echo "(( aes_block[$((4*c))]     = b0 ^ b1 ^ a1 ^ a2 ^ a3 ^ aes_key[16*i + $((4*c))] ))"
-        echo "(( aes_block[$((4*c + 1))] = a0 ^ b1 ^ b2 ^ a2 ^ a3 ^ aes_key[16*i + $((4*c + 1))] ))"
-        echo "(( aes_block[$((4*c + 2))] = a0 ^ a1 ^ b2 ^ b3 ^ a3 ^ aes_key[16*i + $((4*c + 2))] ))"
-        echo "(( aes_block[$((4*c + 3))] = b0 ^ a0 ^ a1 ^ a2 ^ b3 ^ aes_key[16*i + $((4*c + 3))] ))"
+        echo "a$r=row$r"
+        echo "(( h = (a$r & 0x80808080) >> 7 ))"
+        echo "(( b$r = h ^ h << 1 ^ h << 3 ^ h << 4 ^ (a$r & 0x7f7f7f7f) << 1 ))"
     done
+
+    echo "(( row0 = b0 ^ b1 ^ a1 ^ a2 ^ a3 ^ aes_keysched[4*i] ))"
+    echo "(( row1 = a0 ^ b1 ^ b2 ^ a2 ^ a3 ^ aes_keysched[4*i + 1] ))"
+    echo "(( row2 = a0 ^ a1 ^ b2 ^ b3 ^ a3 ^ aes_keysched[4*i + 2] ))"
+    echo "(( row3 = b0 ^ a0 ^ a1 ^ a2 ^ b3 ^ aes_keysched[4*i + 3] ))"
 }
 
 aes_add_round_key() {
     local -i k
-    for (( k=0; k < 16; k++ )); do
-        echo "(( aes_block[$k] ^= aes_key[16*i + $k] ))"
+    for (( k=0; k < 4; k++ )); do
+        echo "(( row$k ^= aes_keysched[4*i + $k] ))"
+    done
+}
+
+aes_pack() {
+    local -i r
+    for r in {0..3}; do
+        echo "(( row$r = $(aes_row "aes_block[$r]" "aes_block[$((r+4))]" "aes_block[$((r+8))]" "aes_block[$((r+12))]") ))"
+    done
+}
+
+aes_unpack() {
+    local -i k
+    for k in {0..15}; do
+        echo "(( aes_block[$k] = row$((k % 4)) >> $((k / 4 * 8)) & 0xff ))"
     done
 }
 
 eval "
 aes_encrypt_block() {
     local -i i=0
-    local -i a0 a1 a2 a3 b0 b1 b2 b3
+    local -i a0 a1 a2 a3 b0 b1 b2 b3 row0 row1 row2 row3 h
+    $(aes_pack)
     $(aes_add_round_key)
     for (( i=1; i < aes_rounds-1; i++ )); do
-        $aes_sub_shift
+        $(aes_sub_shift)
         $(aes_mix_columns_add_key)
     done
-    $aes_sub_shift
+    $(aes_sub_shift)
     $(aes_add_round_key)
+    $(aes_unpack)
 }
 "
 
@@ -136,6 +150,8 @@ if [ -n "${RUN_TESTS+x}" ]; then
     # Test vectors from NIST FIPS 197, Appendix C
     . tests.sh
     echo Running AES unit tests...
+
+    declare -i aes_keysched
 
     echo AES-128
     declare -i aes_key=($(fromhex 000102030405060708090a0b0c0d0e0f))
