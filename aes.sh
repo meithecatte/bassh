@@ -17,29 +17,31 @@ aes_sbox=(
     140 161 137 13 191 230 66 104 65 153 45 15 176 84 187 22
 )
 
-aes_sub_bytes() {
-    local -i i
-    for (( i=0; i < 16; i++ )); do
-        (( aes_block[i] = aes_sbox[aes_block[i]] ))
-    done
-}
-
-aes_shift_rows() {
+aes_sub_shift() {
     local -i t
-    t=aes_block[1]
-    aes_block[1]=aes_block[5]
-    aes_block[5]=aes_block[9]
-    aes_block[9]=aes_block[13]
-    aes_block[13]=t
+    (( aes_block[0] = aes_sbox[aes_block[0]] ))
+    (( aes_block[4] = aes_sbox[aes_block[4]] ))
+    (( aes_block[8] = aes_sbox[aes_block[8]] ))
+    (( aes_block[12] = aes_sbox[aes_block[12]] ))
 
-    t=aes_block[2]; aes_block[2]=aes_block[10]; aes_block[10]=t
-    t=aes_block[6]; aes_block[6]=aes_block[14]; aes_block[14]=t
+    t=aes_block[1]
+    (( aes_block[1] = aes_sbox[aes_block[5]] ))
+    (( aes_block[5] = aes_sbox[aes_block[9]] ))
+    (( aes_block[9] = aes_sbox[aes_block[13]] ))
+    (( aes_block[13] = aes_sbox[t] ))
+
+    t=aes_block[2];
+    (( aes_block[2] = aes_sbox[aes_block[10]] ))
+    (( aes_block[10] = aes_sbox[t] ))
+    t=aes_block[6]
+    (( aes_block[6] = aes_sbox[aes_block[14]] ))
+    (( aes_block[14] = aes_sbox[t] ))
 
     t=aes_block[3]
-    aes_block[3]=aes_block[15]
-    aes_block[15]=aes_block[11]
-    aes_block[11]=aes_block[7]
-    aes_block[7]=t
+    (( aes_block[3] = aes_sbox[aes_block[15]] ))
+    (( aes_block[15] = aes_sbox[aes_block[11]] ))
+    (( aes_block[11] = aes_sbox[aes_block[7]] ))
+    (( aes_block[7] = aes_sbox[t] ))
 }
 
 aes_mix_columns() {
@@ -108,13 +110,11 @@ aes_encrypt_block() {
     local -i i
     aes_add_round_key 0
     for (( i=1; i < aes_rounds-1; i++ )); do
-        aes_sub_bytes
-        aes_shift_rows
+        aes_sub_shift
         aes_mix_columns
         aes_add_round_key $i
     done
-    aes_sub_bytes
-    aes_shift_rows
+    aes_sub_shift
     aes_add_round_key $i
 }
 
@@ -130,9 +130,7 @@ if [ -n "${RUN_TESTS+x}" ]; then
     . tests.sh
     echo Running AES unit tests...
     declare -i aes_block=($(fromhex 00102030405060708090a0b0c0d0e0f0))
-    aes_sub_bytes
-    assert_eq $(tohex "${aes_block[@]}") 63cab7040953d051cd60e0e7ba70e18c
-    aes_shift_rows
+    aes_sub_shift
     assert_eq $(tohex "${aes_block[@]}") 6353e08c0960e104cd70b751bacad0e7
     aes_mix_columns
     assert_eq $(tohex "${aes_block[@]}") 5f72641557f5bc92f7be3b291db9f91a
