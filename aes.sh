@@ -17,60 +17,6 @@ aes_sbox=(
     140 161 137 13 191 230 66 104 65 153 45 15 176 84 187 22
 )
 
-aes_sub_shift() {
-    local -i t
-    (( aes_block[0] = aes_sbox[aes_block[0]] ))
-    (( aes_block[4] = aes_sbox[aes_block[4]] ))
-    (( aes_block[8] = aes_sbox[aes_block[8]] ))
-    (( aes_block[12] = aes_sbox[aes_block[12]] ))
-
-    t=aes_block[1]
-    (( aes_block[1] = aes_sbox[aes_block[5]] ))
-    (( aes_block[5] = aes_sbox[aes_block[9]] ))
-    (( aes_block[9] = aes_sbox[aes_block[13]] ))
-    (( aes_block[13] = aes_sbox[t] ))
-
-    t=aes_block[2];
-    (( aes_block[2] = aes_sbox[aes_block[10]] ))
-    (( aes_block[10] = aes_sbox[t] ))
-    t=aes_block[6]
-    (( aes_block[6] = aes_sbox[aes_block[14]] ))
-    (( aes_block[14] = aes_sbox[t] ))
-
-    t=aes_block[3]
-    (( aes_block[3] = aes_sbox[aes_block[15]] ))
-    (( aes_block[15] = aes_sbox[aes_block[11]] ))
-    (( aes_block[11] = aes_sbox[aes_block[7]] ))
-    (( aes_block[7] = aes_sbox[t] ))
-}
-
-aes_mix_columns() {
-    local -i c
-    local -i a0 a1 a2 a3 b0 b1 b2 b3
-    for (( c=0; c < 4; c++ )); do
-        # This strategy is inspired by the Wikipedia article
-        # "Rijndael MixColumns"
-        #
-        # a contains the input coefficients
-        # b contains each coefficient multiplied by x (in GF(2**8), that is)
-        (( a0 = aes_block[4*c] ))
-        (( a1 = aes_block[4*c + 1] ))
-        (( a2 = aes_block[4*c + 2] ))
-        (( a3 = aes_block[4*c + 3] ))
-
-        # NOTE: multiplication just selects between 0x00 and 0x1b here
-        (( b0 = ((a0 >> 7) * 0x1b) ^ (a0 << 1) & 0xff ))
-        (( b1 = ((a1 >> 7) * 0x1b) ^ (a1 << 1) & 0xff ))
-        (( b2 = ((a2 >> 7) * 0x1b) ^ (a2 << 1) & 0xff ))
-        (( b3 = ((a3 >> 7) * 0x1b) ^ (a3 << 1) & 0xff ))
-
-        (( aes_block[4*c]     = b0 ^ b1 ^ a1 ^ a2 ^ a3 ))
-        (( aes_block[4*c + 1] = a0 ^ b1 ^ b2 ^ a2 ^ a3 ))
-        (( aes_block[4*c + 2] = a0 ^ a1 ^ b2 ^ b3 ^ a3 ))
-        (( aes_block[4*c + 3] = b0 ^ a0 ^ a1 ^ a2 ^ b3 ))
-    done
-}
-
 aes_expand_key() {
     local -i N=${#aes_key[@]}
     case $N in
@@ -105,24 +51,80 @@ aes_expand_key() {
     done
 }
 
-aes_add_round_key() {
-    local -i r=$1 i
-    for (( i=0; i < 16; i++ )); do
-        (( aes_block[i] ^= aes_key[16*r + i] ))
+aes_sub_shift='
+    local -i t
+    (( aes_block[0] = aes_sbox[aes_block[0]] ))
+    (( aes_block[4] = aes_sbox[aes_block[4]] ))
+    (( aes_block[8] = aes_sbox[aes_block[8]] ))
+    (( aes_block[12] = aes_sbox[aes_block[12]] ))
+
+    t=aes_block[1]
+    (( aes_block[1] = aes_sbox[aes_block[5]] ))
+    (( aes_block[5] = aes_sbox[aes_block[9]] ))
+    (( aes_block[9] = aes_sbox[aes_block[13]] ))
+    (( aes_block[13] = aes_sbox[t] ))
+
+    t=aes_block[2];
+    (( aes_block[2] = aes_sbox[aes_block[10]] ))
+    (( aes_block[10] = aes_sbox[t] ))
+    t=aes_block[6]
+    (( aes_block[6] = aes_sbox[aes_block[14]] ))
+    (( aes_block[14] = aes_sbox[t] ))
+
+    t=aes_block[3]
+    (( aes_block[3] = aes_sbox[aes_block[15]] ))
+    (( aes_block[15] = aes_sbox[aes_block[11]] ))
+    (( aes_block[11] = aes_sbox[aes_block[7]] ))
+    (( aes_block[7] = aes_sbox[t] ))
+'
+
+aes_mix_columns() {
+    local -i c
+    for (( c=0; c < 4; c++ )); do
+        # This strategy is inspired by the Wikipedia article
+        # "Rijndael MixColumns"
+        #
+        # a contains the input coefficients
+        # b contains each coefficient multiplied by x (in GF(2**8), that is)
+        echo "(( a0 = aes_block[$((4*c))] ))"
+        echo "(( a1 = aes_block[$((4*c + 1))] ))"
+        echo "(( a2 = aes_block[$((4*c + 2))] ))"
+        echo "(( a3 = aes_block[$((4*c + 3))] ))"
+
+        # NOTE: multiplication just selects between 0x00 and 0x1b here
+        echo "(( b0 = ((a0 >> 7) * 0x1b) ^ (a0 << 1) & 0xff ))"
+        echo "(( b1 = ((a1 >> 7) * 0x1b) ^ (a1 << 1) & 0xff ))"
+        echo "(( b2 = ((a2 >> 7) * 0x1b) ^ (a2 << 1) & 0xff ))"
+        echo "(( b3 = ((a3 >> 7) * 0x1b) ^ (a3 << 1) & 0xff ))"
+
+        echo "(( aes_block[$((4*c))]     = b0 ^ b1 ^ a1 ^ a2 ^ a3 ))"
+        echo "(( aes_block[$((4*c + 1))] = a0 ^ b1 ^ b2 ^ a2 ^ a3 ))"
+        echo "(( aes_block[$((4*c + 2))] = a0 ^ a1 ^ b2 ^ b3 ^ a3 ))"
+        echo "(( aes_block[$((4*c + 3))] = b0 ^ a0 ^ a1 ^ a2 ^ b3 ))"
     done
 }
 
-aes_encrypt_block() {
-    local -i i
-    aes_add_round_key 0
-    for (( i=1; i < aes_rounds-1; i++ )); do
-        aes_sub_shift
-        aes_mix_columns
-        aes_add_round_key $i
+aes_add_round_key() {
+    local -i k
+    for (( k=0; k < 16; k++ )); do
+        echo "(( aes_block[$k] ^= aes_key[16*i + $k] ))"
     done
-    aes_sub_shift
-    aes_add_round_key $i
 }
+
+eval "
+aes_encrypt_block() {
+    local -i i=0
+    local -i a0 a1 a2 a3 b0 b1 b2 b3
+    $(aes_add_round_key)
+    for (( i=1; i < aes_rounds-1; i++ )); do
+        $aes_sub_shift
+        $(aes_mix_columns)
+        $(aes_add_round_key)
+    done
+    $aes_sub_shift
+    $(aes_add_round_key)
+}
+"
 
 benchmark() {
     local -i i
@@ -135,11 +137,6 @@ if [ -n "${RUN_TESTS+x}" ]; then
     # Test vectors from NIST FIPS 197, Appendix C
     . tests.sh
     echo Running AES unit tests...
-    declare -i aes_block=($(fromhex 00102030405060708090a0b0c0d0e0f0))
-    aes_sub_shift
-    assert_eq $(tohex "${aes_block[@]}") 6353e08c0960e104cd70b751bacad0e7
-    aes_mix_columns
-    assert_eq $(tohex "${aes_block[@]}") 5f72641557f5bc92f7be3b291db9f91a
 
     echo AES-128
     declare -i aes_key=($(fromhex 000102030405060708090a0b0c0d0e0f))
