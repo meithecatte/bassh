@@ -45,7 +45,7 @@ aes_sub_shift() {
 }
 
 aes_mix_columns() {
-    local -i c i
+    local -i c
     local -ai a b
     for (( c=0; c < 4; c++ )); do
         # This strategy is inspired by the Wikipedia article
@@ -53,11 +53,17 @@ aes_mix_columns() {
         #
         # a contains the input coefficients
         # b contains each coefficient multiplied by x (in GF(2**8), that is)
-        for (( i=0; i < 4; i++ )); do
-            (( a[i] = aes_block[4*c + i] ))
-            # NOTE: multiplication just selects between 0x00 and 0x1b here
-            (( b[i] = ((a[i] >> 7) * 0x1b) ^ (a[i] << 1) & 0xff ))
-        done
+        (( a[0] = aes_block[4*c] ))
+        (( a[1] = aes_block[4*c + 1] ))
+        (( a[2] = aes_block[4*c + 2] ))
+        (( a[3] = aes_block[4*c + 3] ))
+
+        # NOTE: multiplication just selects between 0x00 and 0x1b here
+        (( b[0] = ((a[0] >> 7) * 0x1b) ^ (a[0] << 1) & 0xff ))
+        (( b[1] = ((a[1] >> 7) * 0x1b) ^ (a[1] << 1) & 0xff ))
+        (( b[2] = ((a[2] >> 7) * 0x1b) ^ (a[2] << 1) & 0xff ))
+        (( b[3] = ((a[3] >> 7) * 0x1b) ^ (a[3] << 1) & 0xff ))
+
         (( aes_block[4*c]     = b[0] ^ b[1] ^ a[1] ^ a[2] ^ a[3] ))
         (( aes_block[4*c + 1] = a[0] ^ b[1] ^ b[2] ^ a[2] ^ a[3] ))
         (( aes_block[4*c + 2] = a[0] ^ a[1] ^ b[2] ^ b[3] ^ a[3] ))
