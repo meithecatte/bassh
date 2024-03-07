@@ -78,7 +78,7 @@ aes_sub_shift='
     (( aes_block[7] = aes_sbox[t] ))
 '
 
-aes_mix_columns() {
+aes_mix_columns_add_key() {
     local -i c
     for (( c=0; c < 4; c++ )); do
         # This strategy is inspired by the Wikipedia article
@@ -97,10 +97,10 @@ aes_mix_columns() {
         echo "(( b2 = ((a2 >> 7) * 0x1b) ^ (a2 << 1) & 0xff ))"
         echo "(( b3 = ((a3 >> 7) * 0x1b) ^ (a3 << 1) & 0xff ))"
 
-        echo "(( aes_block[$((4*c))]     = b0 ^ b1 ^ a1 ^ a2 ^ a3 ))"
-        echo "(( aes_block[$((4*c + 1))] = a0 ^ b1 ^ b2 ^ a2 ^ a3 ))"
-        echo "(( aes_block[$((4*c + 2))] = a0 ^ a1 ^ b2 ^ b3 ^ a3 ))"
-        echo "(( aes_block[$((4*c + 3))] = b0 ^ a0 ^ a1 ^ a2 ^ b3 ))"
+        echo "(( aes_block[$((4*c))]     = b0 ^ b1 ^ a1 ^ a2 ^ a3 ^ aes_key[16*i + $((4*c))] ))"
+        echo "(( aes_block[$((4*c + 1))] = a0 ^ b1 ^ b2 ^ a2 ^ a3 ^ aes_key[16*i + $((4*c + 1))] ))"
+        echo "(( aes_block[$((4*c + 2))] = a0 ^ a1 ^ b2 ^ b3 ^ a3 ^ aes_key[16*i + $((4*c + 2))] ))"
+        echo "(( aes_block[$((4*c + 3))] = b0 ^ a0 ^ a1 ^ a2 ^ b3 ^ aes_key[16*i + $((4*c + 3))] ))"
     done
 }
 
@@ -118,8 +118,7 @@ aes_encrypt_block() {
     $(aes_add_round_key)
     for (( i=1; i < aes_rounds-1; i++ )); do
         $aes_sub_shift
-        $(aes_mix_columns)
-        $(aes_add_round_key)
+        $(aes_mix_columns_add_key)
     done
     $aes_sub_shift
     $(aes_add_round_key)
