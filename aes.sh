@@ -42,13 +42,8 @@ aes_shift_rows() {
     aes_block[7]=t
 }
 
-aes_xmul() {
-    # NOTE: multiplication just selects between 0x00 and 0x1b here
-    xmul_out=$(( (($1 >> 7) * 0x1b) ^ ($1 << 1) & 0xff ))
-}
-
 aes_mix_columns() {
-    local -i c i xmul_out
+    local -i c i
     local -ai a b
     for (( c=0; c < 4; c++ )); do
         # This strategy is inspired by the Wikipedia article
@@ -58,7 +53,8 @@ aes_mix_columns() {
         # b contains each coefficient multiplied by x (in GF(2**8), that is)
         for (( i=0; i < 4; i++ )); do
             (( a[i] = aes_block[4*c + i] ))
-            aes_xmul ${a[i]}; b[i]=xmul_out
+            # NOTE: multiplication just selects between 0x00 and 0x1b here
+            (( b[i] = ((a[i] >> 7) * 0x1b) ^ (a[i] << 1) & 0xff ))
         done
         (( aes_block[4*c]     = b[0] ^ b[1] ^ a[1] ^ a[2] ^ a[3] ))
         (( aes_block[4*c + 1] = a[0] ^ b[1] ^ b[2] ^ a[2] ^ a[3] ))
@@ -86,7 +82,7 @@ aes_expand_key() {
             (( aes_key[i+1] = aes_key[i-N+1] ^ aes_sbox[aes_key[i-2]] ))
             (( aes_key[i+2] = aes_key[i-N+2] ^ aes_sbox[aes_key[i-1]] ))
             (( aes_key[i+3] = aes_key[i-N+3] ^ aes_sbox[aes_key[i-4]] ))
-            aes_xmul $rcon; rcon=xmul_out
+            (( rcon = ((rcon >> 7) * 0x1b) ^ (rcon << 1) & 0xff ))
         elif (( N == 32 && i % N == 16 )); then
             (( aes_key[i]   = aes_key[i-N]   ^ aes_sbox[aes_key[i-4]] ))
             (( aes_key[i+1] = aes_key[i-N+1] ^ aes_sbox[aes_key[i-3]] ))
@@ -122,6 +118,13 @@ aes_encrypt_block() {
     aes_add_round_key $i
 }
 
+benchmark() {
+    local -i i
+    for i in {1..100}; do
+        aes_encrypt_block
+    done
+}
+
 if [ -n "${RUN_TESTS+x}" ]; then
     # Test vectors from NIST FIPS 197, Appendix C
     . tests.sh
@@ -134,7 +137,7 @@ if [ -n "${RUN_TESTS+x}" ]; then
     aes_mix_columns
     assert_eq $(tohex "${aes_block[@]}") 5f72641557f5bc92f7be3b291db9f91a
 
-    # AES-128
+    echo AES-128
     declare -i aes_key=($(fromhex 000102030405060708090a0b0c0d0e0f))
     aes_expand_key
     assert_eq $aes_rounds 11
@@ -142,18 +145,21 @@ if [ -n "${RUN_TESTS+x}" ]; then
     declare -i aes_block=($(fromhex 00112233445566778899aabbccddeeff))
     aes_encrypt_block
     assert_eq $(tohex "${aes_block[@]}") 69c4e0d86a7b0430d8cdb78070b4c55a
+    time benchmark
 
-    # AES-192
+    echo AES-192
     declare -i aes_key=($(fromhex 000102030405060708090a0b0c0d0e0f1011121314151617))
     aes_expand_key
     declare -i aes_block=($(fromhex 00112233445566778899aabbccddeeff))
     aes_encrypt_block
     assert_eq $(tohex "${aes_block[@]}") dda97ca4864cdfe06eaf70a0ec0d7191
+    time benchmark
 
-    # AES-256
+    echo AES-256
     declare -i aes_key=($(fromhex 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f))
     aes_expand_key
     declare -i aes_block=($(fromhex 00112233445566778899aabbccddeeff))
     aes_encrypt_block
     assert_eq $(tohex "${aes_block[@]}") 8ea2b7ca516745bfeafc49904b496089
+    time benchmark
 fi
