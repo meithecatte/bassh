@@ -46,28 +46,28 @@ aes_sub_shift() {
 
 aes_mix_columns() {
     local -i c
-    local -ai a b
+    local -i a0 a1 a2 a3 b0 b1 b2 b3
     for (( c=0; c < 4; c++ )); do
         # This strategy is inspired by the Wikipedia article
         # "Rijndael MixColumns"
         #
         # a contains the input coefficients
         # b contains each coefficient multiplied by x (in GF(2**8), that is)
-        (( a[0] = aes_block[4*c] ))
-        (( a[1] = aes_block[4*c + 1] ))
-        (( a[2] = aes_block[4*c + 2] ))
-        (( a[3] = aes_block[4*c + 3] ))
+        (( a0 = aes_block[4*c] ))
+        (( a1 = aes_block[4*c + 1] ))
+        (( a2 = aes_block[4*c + 2] ))
+        (( a3 = aes_block[4*c + 3] ))
 
         # NOTE: multiplication just selects between 0x00 and 0x1b here
-        (( b[0] = ((a[0] >> 7) * 0x1b) ^ (a[0] << 1) & 0xff ))
-        (( b[1] = ((a[1] >> 7) * 0x1b) ^ (a[1] << 1) & 0xff ))
-        (( b[2] = ((a[2] >> 7) * 0x1b) ^ (a[2] << 1) & 0xff ))
-        (( b[3] = ((a[3] >> 7) * 0x1b) ^ (a[3] << 1) & 0xff ))
+        (( b0 = ((a0 >> 7) * 0x1b) ^ (a0 << 1) & 0xff ))
+        (( b1 = ((a1 >> 7) * 0x1b) ^ (a1 << 1) & 0xff ))
+        (( b2 = ((a2 >> 7) * 0x1b) ^ (a2 << 1) & 0xff ))
+        (( b3 = ((a3 >> 7) * 0x1b) ^ (a3 << 1) & 0xff ))
 
-        (( aes_block[4*c]     = b[0] ^ b[1] ^ a[1] ^ a[2] ^ a[3] ))
-        (( aes_block[4*c + 1] = a[0] ^ b[1] ^ b[2] ^ a[2] ^ a[3] ))
-        (( aes_block[4*c + 2] = a[0] ^ a[1] ^ b[2] ^ b[3] ^ a[3] ))
-        (( aes_block[4*c + 3] = b[0] ^ a[0] ^ a[1] ^ a[2] ^ b[3] ))
+        (( aes_block[4*c]     = b0 ^ b1 ^ a1 ^ a2 ^ a3 ))
+        (( aes_block[4*c + 1] = a0 ^ b1 ^ b2 ^ a2 ^ a3 ))
+        (( aes_block[4*c + 2] = a0 ^ a1 ^ b2 ^ b3 ^ a3 ))
+        (( aes_block[4*c + 3] = b0 ^ a0 ^ a1 ^ a2 ^ b3 ))
     done
 }
 
