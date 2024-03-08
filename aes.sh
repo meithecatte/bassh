@@ -123,6 +123,7 @@ aes_unpack() {
     done
 }
 
+# Like it or not, this is what performant bash code looks like :3
 eval "
 aes_encrypt_block() {
     local -i i=0

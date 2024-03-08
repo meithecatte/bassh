@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 LC_ALL=C
 LANG=C
+PATH=
 
 SSH_MSG_KEXINIT=20
 
