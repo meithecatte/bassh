@@ -150,7 +150,7 @@ benchmark() {
 if [ -n "${RUN_TESTS+x}" ]; then
     # Test vectors from NIST FIPS 197, Appendix C
     . tests.sh
-    echo Running AES unit tests...
+    echo Testing AES...
 
     declare -i aes_keysched
 
