@@ -17,6 +17,11 @@ aes_sbox=(
     140 161 137 13 191 230 66 104 65 153 45 15 176 84 187 22
 )
 
+# input:
+# aes_key - array of 16, 24, or 32 bytes
+#
+# output:
+# aes_rounds, aes_keysched
 aes_expand_key() {
     local -i N=${#aes_key[@]}
     case $N in
@@ -160,7 +165,7 @@ if [ -n "${RUN_TESTS+x}" ]; then
 
     declare -i aes_keysched
 
-    echo AES-128
+    echo "AES-128 (x1000)"
     declare -i aes_key=($(fromhex 000102030405060708090a0b0c0d0e0f))
     aes_expand_key
     assert_eq $aes_rounds 11
@@ -170,7 +175,7 @@ if [ -n "${RUN_TESTS+x}" ]; then
     assert_eq $(tohex "${aes_block[@]}") 69c4e0d86a7b0430d8cdb78070b4c55a
     time benchmark
 
-    echo AES-192
+    echo "AES-192 (x1000)"
     declare -i aes_key=($(fromhex 000102030405060708090a0b0c0d0e0f1011121314151617))
     aes_expand_key
     declare -i aes_block=($(fromhex 00112233445566778899aabbccddeeff))
@@ -178,7 +183,7 @@ if [ -n "${RUN_TESTS+x}" ]; then
     assert_eq $(tohex "${aes_block[@]}") dda97ca4864cdfe06eaf70a0ec0d7191
     time benchmark
 
-    echo AES-256
+    echo "AES-256 (x1000)"
     declare -i aes_key=($(fromhex 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f))
     aes_expand_key
     declare -i aes_block=($(fromhex 00112233445566778899aabbccddeeff))

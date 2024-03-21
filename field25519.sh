@@ -10,9 +10,18 @@
 # form, it can handle inputs where each limb ranges between -2**26 and 2**26.
 
 declwide() {
-    local v=$1 k=${2:-10} i
-    for (( i = 0; i < k; i++ )); do
-        echo "local -i $v$i"
+    local i k v
+    if [[ "$1" =~ ^[0-9]+$ ]]; then
+        k=$1
+        shift
+    else
+        k=10
+    fi
+
+    for v in "$@"; do
+        for (( i = 0; i < k; i++ )); do
+            echo "local -i $v$i"
+        done
     done
 }
 
@@ -42,16 +51,20 @@ f25519_reduce_at() {
 
 f25519_add() {
     local a=$1 b=$2 out=$3 i
+    echo "(("
     for i in {0..9}; do
-        echo "(( $out$i = $a$i + $b$i ))"
+        echo "$out$i = $a$i + $b$i,"
     done
+    echo "0))"
 }
 
 f25519_sub() {
     local a=$1 b=$2 out=$3 i
+    echo "(("
     for i in {0..9}; do
-        echo "(( $out$i = $a$i - $b$i ))"
+        echo "$out$i = $a$i - $b$i,"
     done
+    echo "0))"
 }
 
 # NOTE: apart from making sure that all outputs are within [-2**25; 2**25],
@@ -96,6 +109,34 @@ f25519_mul() {
     done
 }
 
+f25519_muls() {
+    local a=$1 k=$2 out=$3 i
+    echo "(("
+    for i in {0..9}; do
+        echo "$out$i = $a$i * $k,"
+    done
+
+    f25519_carry_at $out 8
+    f25519_carry_wrap $out
+    for i in {0..8}; do
+        f25519_carry_at $out $i
+    done
+    echo "0))"
+}
+
+#   When receiving [a field element], implementations of X25519 (but not X448)
+#   MUST mask the most significant bit in the final byte.
+#
+#                   ~ RFC7748, 5. The X25519 and X448 Functions
+
+#   A curve point (x,y), with coordinates in the range 0 <= x,y < p, is
+#   coded as follows.  First, encode the y-coordinate as a little-endian
+#   string of 32 octets.  The most significant bit of the final octet is
+#   always zero.  To form the encoding of the point, copy the least
+#   significant bit of the x-coordinate to the most significant bit of
+#   the final octet.
+#
+#                   ~ RFC8032, 5.1.2. Encoding
 f25519_unpack() {
     local from=$1 to=$2
     local -i i width lsb byte bit handled
@@ -104,11 +145,6 @@ f25519_unpack() {
     for i in {0..9}; do
         (( width = i % 2 ? 25 : 26 ))
         (( lsb = (51 * i + 1) / 2 ))
-
-        # don't trim out the most significant bit
-        if (( i == 9 )); then
-            width=26
-        fi
 
         local chunk=""
         handled=0
@@ -142,13 +178,12 @@ f25519_unpack() {
 
     # odd indices are at most 2**25 - 1. even with carry into them, which is at
     # most 1 in this situation, they fit in the reduced range. thus we only
-    # need to carry from the even indices (and 9, due to the special case above)
-    f25519_carry_at $to 8
-    f25519_carry_wrap $to
+    # need to carry from the even indices.
     f25519_carry_at $to 0
     f25519_carry_at $to 2
     f25519_carry_at $to 4
     f25519_carry_at $to 6
+    f25519_carry_at $to 8
     echo "0))"
 }
 
@@ -208,14 +243,7 @@ f25519_expshift() {
 # Computes x^{-1} = x^{p - 2}
 f25519_invert() {
     local x=$1 out=$2
-    declwide e2_
-    declwide e9_
-    declwide e11_
-    declwide eb5_
-    declwide eb10_
-    declwide eb20_
-    declwide eb50_
-    declwide eb100_
+    declwide e2_ e9_ e11_ eb5_ eb10_ eb20_ eb50_ eb100_
     f25519_square $x e2_      # e2_ = x^2
     f25519_square e2_ e9_    # e9_ = x^4
     f25519_square e9_ e9_    # e9_ = x^8
@@ -249,7 +277,7 @@ if [ -n "${RUN_TESTS+x}" ]; then
 
     input=($(fromhex 00907895389c3ee61e36aa5e2f57b4b39c20f711ea807da67e5928d1223c137d))
     eval "$(f25519_unpack input a)"
-    input=($(fromhex b2451e5f063eefd3643e5b8fb0adeee77a8816fdc6394860e0f8b6b2c9d34fba))
+    input=($(fromhex c5451e5f063eefd3643e5b8fb0adeee77a8816fdc6394860e0f8b6b2c9d34fba))
     eval "$(f25519_unpack input b)"
     eval "$(f25519_mul a b c)"
     eval "$(f25519_pack c output)"
@@ -263,9 +291,9 @@ if [ -n "${RUN_TESTS+x}" ]; then
     eval "$(f25519_pack c output)"
     assert_eq $(tohex "${output[@]}") 2f2ee78885450bbf254b4aca572a907212de29607d99d5dee45048593711b61e
 
-    input=($(fromhex 8197e80e1ca054d5f8b4440fbb03b9f6c0a64784be75a6103f9a1dc697cd9891))
+    input=($(fromhex 9497e80e1ca054d5f8b4440fbb03b9f6c0a64784be75a6103f9a1dc697cd9891))
     eval "$(f25519_unpack input a)"
-    input=($(fromhex f7e4cd0c29e6d59f1b11abf1ddd7e946e0ab31a9f3b988c0a7c152c983f2d4ce))
+    input=($(fromhex 0ae5cd0c29e6d59f1b11abf1ddd7e946e0ab31a9f3b988c0a7c152c983f2d4ce))
     eval "$(f25519_unpack input b)"
     eval "$(f25519_mul a b c)"
     eval "$(f25519_pack c output)"
@@ -279,13 +307,13 @@ if [ -n "${RUN_TESTS+x}" ]; then
     }
     "
 
-    input=($(fromhex 636be74fd3110fe2c6d3294c3a86e0007d10b0113c2b282e66de28e5385ee4d5))
+    input=($(fromhex 766be74fd3110fe2c6d3294c3a86e0007d10b0113c2b282e66de28e5385ee4d5))
     eval "$(f25519_unpack input a)"
     invert
     eval "$(f25519_pack a output)"
     assert_eq $(tohex "${output[@]}") 8a2ac87e16241430df94a4ed0bdb1f0df83c85d09e182b7334549b39ea9b4e6b
 
-    echo Benchmarking f25519_invert...
+    echo "Benchmarking f25519_invert (x10)..."
 
     time for i in {1..10}; do invert; done
 fi
