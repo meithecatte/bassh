@@ -75,10 +75,10 @@ aes_subbed() {
 }
 
 aes_sub_shift() {
-    echo "(( row0 = $(aes_subbed  0  4  8 12) ))"
-    echo "(( row1 = $(aes_subbed  5  9 13  1) ))"
-    echo "(( row2 = $(aes_subbed 10 14  2  6) ))"
-    echo "(( row3 = $(aes_subbed 15  3  7 11) ))"
+    echo "row0 = $(aes_subbed  0  4  8 12),"
+    echo "row1 = $(aes_subbed  5  9 13  1),"
+    echo "row2 = $(aes_subbed 10 14  2  6),"
+    echo "row3 = $(aes_subbed 15  3  7 11),"
 }
 
 aes_mix_columns_add_key() {
@@ -91,35 +91,35 @@ aes_mix_columns_add_key() {
         # b contains each coefficient multiplied by x (in GF(2**8), that is)
 
         # NOTE: multiplication just selects between 0x00 and 0x1b here
-        echo "a$r=row$r"
-        echo "(( h = (a$r & 0x80808080) >> 7 ))"
-        echo "(( b$r = h ^ h << 1 ^ h << 3 ^ h << 4 ^ (a$r & 0x7f7f7f7f) << 1 ))"
+        echo "a$r=row$r,"
+        echo "h = (a$r & 0x80808080) >> 7,"
+        echo "b$r = h ^ h << 1 ^ h << 3 ^ h << 4 ^ (a$r & 0x7f7f7f7f) << 1,"
     done
 
-    echo "(( row0 = b0 ^ b1 ^ a1 ^ a2 ^ a3 ^ aes_keysched[4*i] ))"
-    echo "(( row1 = a0 ^ b1 ^ b2 ^ a2 ^ a3 ^ aes_keysched[4*i + 1] ))"
-    echo "(( row2 = a0 ^ a1 ^ b2 ^ b3 ^ a3 ^ aes_keysched[4*i + 2] ))"
-    echo "(( row3 = b0 ^ a0 ^ a1 ^ a2 ^ b3 ^ aes_keysched[4*i + 3] ))"
+    echo "row0 = b0 ^ b1 ^ a1 ^ a2 ^ a3 ^ aes_keysched[4*i],"
+    echo "row1 = a0 ^ b1 ^ b2 ^ a2 ^ a3 ^ aes_keysched[4*i + 1],"
+    echo "row2 = a0 ^ a1 ^ b2 ^ b3 ^ a3 ^ aes_keysched[4*i + 2],"
+    echo "row3 = b0 ^ a0 ^ a1 ^ a2 ^ b3 ^ aes_keysched[4*i + 3],"
 }
 
 aes_add_round_key() {
     local -i k
     for (( k=0; k < 4; k++ )); do
-        echo "(( row$k ^= aes_keysched[4*i + $k] ))"
+        echo "row$k ^= aes_keysched[4*i + $k],"
     done
 }
 
 aes_pack() {
     local -i r
     for r in {0..3}; do
-        echo "(( row$r = $(aes_row "aes_block[$r]" "aes_block[$((r+4))]" "aes_block[$((r+8))]" "aes_block[$((r+12))]") ))"
+        echo "row$r = $(aes_row "aes_block[$r]" "aes_block[$((r+4))]" "aes_block[$((r+8))]" "aes_block[$((r+12))]"),"
     done
 }
 
 aes_unpack() {
     local -i k
     for k in {0..15}; do
-        echo "(( aes_block[$k] = row$((k % 4)) >> $((k / 4 * 8)) & 0xff ))"
+        echo "aes_block[$k] = row$((k % 4)) >> $((k / 4 * 8)) & 0xff,"
     done
 }
 
@@ -128,15 +128,21 @@ eval "
 aes_encrypt_block() {
     local -i i=0
     local -i a0 a1 a2 a3 b0 b1 b2 b3 row0 row1 row2 row3 h
+    ((
     $(aes_pack)
     $(aes_add_round_key)
+    0))
     for (( i=1; i < aes_rounds-1; i++ )); do
+        ((
         $(aes_sub_shift)
         $(aes_mix_columns_add_key)
+        0))
     done
+    ((
     $(aes_sub_shift)
     $(aes_add_round_key)
     $(aes_unpack)
+    0))
 }
 "
 
