@@ -142,7 +142,7 @@ aes_encrypt_block() {
 
 benchmark() {
     local -i i
-    for i in {1..100}; do
+    for i in {1..1000}; do
         aes_encrypt_block
     done
 }
