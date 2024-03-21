@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -u
 LC_ALL=C
 LANG=C
 PATH=
