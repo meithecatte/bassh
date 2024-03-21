@@ -195,51 +195,48 @@ f25519_square() {
     f25519_mul $x $x $out
 }
 
+f25519_expshift() {
+    local a=$1 k=$2 out=$3 i
+    f25519_square $a $out
+    echo "for _ in {2..$k}; do"
+        f25519_square $out $out
+    echo "done"
+}
+
 # Computes x^{-1} = x^{p - 2}
 f25519_invert() {
     local x=$1 out=$2
     declwide e2_
-    declwide e4_
-    declwide e8_
-    declwide e16_
-    declwide e32_
-    declwide e64_
-    f25519_square x e2_   # e2_ = x^2
-    f25519_mul x e2_ e2_  # e2_ = x^3 (2 ones)
-
-    f25519_square e2_ e4_  # e4_ = x^6
-    f25519_square e4_ e4_  # e4_ = x^12
-    f25519_mul e2_ e4_ e4_ # e4_ = x^15 (4 ones)
-
-    local -i k
-    for (( k=8; k <= 64; k *= 2 )); do
-        f25519_square e$((k/2))_ e${k}_
-        echo "for i in {1..$((k/2 - 1))}; do"
-            f25519_square e${k}_ e${k}_
-        echo "done"
-        f25519_mul e$((k/2))_ e${k}_ e${k}_ # e${k}_ = x^0xff...ff (k ones)
-    done
-
-    f25519_square e64_ $out
-    echo "for i in {1..63}; do"
-        f25519_square $out $out
-    echo "done"
-    f25519_mul e64_ $out $out # out = x^0xff...ff (128 ones)
-
-    echo "for i in {1..64}; do"
-        f25519_square $out $out
-    echo "done"
-    f25519_mul e64_ $out $out # out = x^0xff...ff (192 ones)
-
-    echo "for i in {1..32}; do"
-        f25519_square $out $out
-    echo "done"
-    f25519_mul e32_ $out $out # out = x^0xff...ff (224 ones)
-
-    echo "for i in {1..16}; do"
-        f25519_square $out $out
-    echo "done"
-    f25519_mul e16_ $out $out # out = x^0xff...ff (240 ones)
+    declwide e9_
+    declwide e11_
+    declwide eb5_
+    declwide eb10_
+    declwide eb20_
+    declwide eb50_
+    declwide eb100_
+    f25519_square $x e2_      # e2_ = x^2
+    f25519_square e2_ e9_    # e9_ = x^4
+    f25519_square e9_ e9_    # e9_ = x^8
+    f25519_mul $x e9_ e9_     # e9_ = x^9
+    f25519_mul e2_ e9_ e11_  # e11_ = x^11
+    f25519_square e11_ eb5_  # eb5_ = x^22
+    f25519_mul e9_ eb5_ eb5_ # eb5_ = x^31
+    f25519_expshift eb5_ 5 eb10_    # eb10_ = x^{2^10 - 2^5}
+    f25519_mul eb5_ eb10_ eb10_     # eb10_ = x^{2^10 - 1}
+    f25519_expshift eb10_ 10 eb20_
+    f25519_mul eb10_ eb20_ eb20_    # eb20_ = x^{2^20 - 1}
+    f25519_expshift eb20_ 20 eb50_
+    f25519_mul eb20_ eb50_ eb50_    # eb50_ = x^{2^40 - 1}
+    f25519_expshift eb50_ 10 eb50_
+    f25519_mul eb10_ eb50_ eb50_    # eb50_ = x^{2^50 - 1}
+    f25519_expshift eb50_ 50 eb100_
+    f25519_mul eb50_ eb100_ eb100_  # eb100_ = x^{2^100 - 1}
+    f25519_expshift eb100_ 100 $out
+    f25519_mul eb100_ $out $out     # out = x^{2^200 - 1}
+    f25519_expshift $out 50 $out
+    f25519_mul eb50_ $out $out      # out = x^{2^250 - 1}
+    f25519_expshift $out 5 $out
+    f25519_mul e11_ $out $out       # out = x^{2^255 - 2^5 + 11 = 2^255 - 21}
 }
 
 if [ -n "${RUN_TESTS+x}" ]; then
@@ -272,13 +269,21 @@ if [ -n "${RUN_TESTS+x}" ]; then
     eval "$(f25519_pack c output)"
     assert_eq $(tohex "${output[@]}") f297bd36e825dbd0d58228beb1ae5369a369c31c621dd5016816fed7bf3ed675
 
-    echo Benchmarking f25519_square...
+    echo Testing f25519_invert...
 
     eval "
-    sqra() {
-        $(f25519_square a a)
+    invert() {
+        $(f25519_invert a a)
     }
     "
 
-    time for i in {1..1000}; do sqra; done
+    input=($(fromhex 636be74fd3110fe2c6d3294c3a86e0007d10b0113c2b282e66de28e5385ee4d5))
+    eval "$(f25519_unpack input a)"
+    invert
+    eval "$(f25519_pack a output)"
+    assert_eq $(tohex "${output[@]}") 8a2ac87e16241430df94a4ed0bdb1f0df83c85d09e182b7334549b39ea9b4e6b
+
+    echo Benchmarking f25519_invert...
+
+    time for i in {1..10}; do invert; done
 fi
