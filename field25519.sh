@@ -21,9 +21,8 @@ f25519_carry_at() {
     local -i bits bias
     (( bits = k % 2 ? 25 : 26 ))
     (( bias = 1 << (bits - 1) ))
-    echo "(( $a$k += $bias ))"
-    echo "(( $a$((k + 1)) += $a$k >> $bits ))"
-    echo "(( $a$k = ($a$k & $(((1 << bits) - 1))) - $bias ))"
+    echo "$a$((k + 1)) += ($a$k + $bias) >> $bits,"
+    echo "$a$k = (($a$k + $bias) & $(((1 << bits) - 1))) - $bias,"
 }
 
 f25519_carry_wrap() {
@@ -31,15 +30,14 @@ f25519_carry_wrap() {
     local -i bits bias
     (( bits = k % 2 ? 25 : 26 ))
     (( bias = 1 << (bits - 1) ))
-    echo "(( $a$k += $bias ))"
-    echo "(( ${a}0 += 19 * ($a$k >> $bits) ))"
-    echo "(( $a$k = ($a$k & $(((1 << bits) - 1))) - $bias ))"
+    echo "${a}0 += 19 * (($a$k + $bias) >> $bits),"
+    echo "$a$k = (($a$k + $bias) & $(((1 << bits) - 1))) - $bias,"
 }
 
 f25519_reduce_at() {
     local a=$1 to=$2
     local from=$((to + 10))
-    echo "(( $a$to += $a$from * 19 ))"
+    echo "$a$to += $a$from * 19,"
 }
 
 f25519_add() {
@@ -75,8 +73,9 @@ f25519_mul() {
         done
     done
 
+    echo "(("
     for i in {0..18}; do
-        echo "(( $tmp$i = ${multsums[i]# + } ))"
+        echo "$tmp$i = ${multsums[i]# + },"
     done
 
     f25519_reduce_at $tmp 8
@@ -90,6 +89,7 @@ f25519_mul() {
     for i in {0..8}; do
         f25519_carry_at $tmp $i
     done
+    echo "0))"
 
     for i in {0..9}; do
         echo "$out$i=\$$tmp$i"
@@ -100,6 +100,7 @@ f25519_unpack() {
     local from=$1 to=$2
     local -i i width lsb byte bit handled
 
+    echo "(("
     for i in {0..9}; do
         (( width = i % 2 ? 25 : 26 ))
         (( lsb = (51 * i + 1) / 2 ))
@@ -136,7 +137,7 @@ f25519_unpack() {
             # lsb must be divisible by 8 by now
             chunk+=" | ($from[$byte] & $(((1 << width) - 1))) << $handled"
         fi
-        echo "(( $to$i = ${chunk# | } ))"
+        echo "$to$i = ${chunk# | },"
     done
 
     # odd indices are at most 2**25 - 1. even with carry into them, which is at
@@ -148,6 +149,7 @@ f25519_unpack() {
     f25519_carry_at $to 2
     f25519_carry_at $to 4
     f25519_carry_at $to 6
+    echo "0))"
 }
 
 f25519_pack() {
