@@ -224,6 +224,8 @@ f25519_pack() {
             echo "(( $to[$k] = $tmp$((k / 4)) & 255 ))"
         fi
     done
+
+    echo "if (( $to[31] >= 128 )); then echo WHAT; fi"
 }
 
 # Currently a trivial wrapper, but there is room for optimisation

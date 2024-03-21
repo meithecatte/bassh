@@ -26,6 +26,7 @@ copy() {
 # x25519_out - 32-byte array
 eval "
 x25519() {
+    local -i x25519_k=(\${x25519_k[@]})
     (( x25519_k[0] &= 248 ))
     (( x25519_k[31] = x25519_k[31] & 127 | 64 ))
     $(declwide 19 t_)
@@ -96,16 +97,16 @@ if [ -n "${RUN_TESTS+x}" ]; then
             x25519_k=($(fromhex 0900000000000000000000000000000000000000000000000000000000000000))
             x25519_u=(${x25519_k[@]})
             for (( i = 0; i < $1; i++ )); do
-                echo $i $(tohex "${x25519_out[@]}")
                 x25519
                 x25519_u=(${x25519_k[@]})
                 x25519_k=(${x25519_out[@]})
+                #echo $i $(tohex "${x25519_out[@]}")
             done
         }
 
         time iterated_x25519 1
         assert_eq $(tohex "${x25519_out[@]}") 422c8e7a6227d7bca1350b3e2bb7279f7897b87bb6854b783c60e80311ae3079
-        time iterated_x25519 1010
+        time iterated_x25519 1000
         assert_eq $(tohex "${x25519_out[@]}") 684cf59ba83309552800ef566f2f4d3c1c3887c49360e3875f2eb94d99532c51
     fi
 fi
