@@ -73,15 +73,12 @@ f25519_mul() {
     local a=$1 b=$2 out=$3 tmp=_t
     local i j
     local -a multsums
-    #local -ai multcount
     for i in {0..9}; do
         for j in {0..9}; do
             if (( i % 2 && j % 2 )); then
                 multsums[i+j]+=" + 2*$a$i*$b$j"
-                #multcount[i+j]+=2
             else
                 multsums[i+j]+=" + $a$i*$b$j"
-                #multcount[i+j]+=1
             fi
         done
     done

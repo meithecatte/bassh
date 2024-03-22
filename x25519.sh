@@ -100,7 +100,6 @@ if [ -n "${RUN_TESTS+x}" ]; then
                 x25519
                 x25519_u=(${x25519_k[@]})
                 x25519_k=(${x25519_out[@]})
-                #echo $i $(tohex "${x25519_out[@]}")
             done
         }
 
