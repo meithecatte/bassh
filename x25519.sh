@@ -1,3 +1,4 @@
+set -u
 . field25519.sh
 
 swap() {
@@ -29,7 +30,7 @@ x25519() {
     local -i x25519_k=(\${x25519_k[@]})
     (( x25519_k[0] &= 248 ))
     (( x25519_k[31] = x25519_k[31] & 127 | 64 ))
-    $(declwide 19 t_)
+    $(declwide 19 _t)
     $(declwide x1_ x2_ z2_ x3_ z3_ A AA B BB E C D DA CB)
     local -i swap=0 x2_0=1 z3_0=1 k_t t tmp
     $(f25519_unpack x25519_u x1_)

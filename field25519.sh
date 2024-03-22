@@ -20,7 +20,7 @@ declwide() {
 
     for v in "$@"; do
         for (( i = 0; i < k; i++ )); do
-            echo "local -i $v$i"
+            echo "local -i $v$i=0"
         done
     done
 }
@@ -221,8 +221,6 @@ f25519_pack() {
             echo "(( $to[$k] = $tmp$((k / 4)) & 255 ))"
         fi
     done
-
-    echo "if (( $to[31] >= 128 )); then echo WHAT; fi"
 }
 
 # Currently a trivial wrapper, but there is room for optimisation
