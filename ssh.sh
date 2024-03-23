@@ -7,8 +7,12 @@ PATH=
 # == Protocol constants ==
 SSH_MSG_DEBUG=4
 SSH_MSG_KEXINIT=20
+SSH_MSG_KEX_ECDH_INIT=30
+SSH_MSG_KEX_ECDH_REPLY=31
 
 . log.sh
+. x25519.sh
+. sha256.sh
 
 # == Configuration (TODO: argument parsing) ==
 host="localhost"
@@ -24,7 +28,8 @@ if ! exec {sock}<>"/dev/tcp/$host/$port"; then
 fi
 
 # == RFC4253, 4.2. Protocol Version Exchange
-printf "SSH-2.0-bassh\r\n" >&$sock
+client_version="SSH-2.0-bassh"
+printf "%s\r\n" "$client_version" >&$sock
 
 while IFS= read -r -u $sock line; do
     case "$line" in
@@ -53,6 +58,92 @@ case "$server_version" in
 SSH-2.0-* | SSH-1.99) ;;
 *) fatal "unknown protocol version (expected 2.0)" ;;
 esac
+
+# == RFC4251, 5. Data Type Representations Used in the SSH Protocols
+
+# uint32_from buf offset outvar
+uint32_from() {
+    local -n buf=$1
+    local -i offset=$2
+    local -n num_out=$3
+    (( num_out = (buf[offset + 0] << 24) | (buf[offset + 1] << 16) \
+               | (buf[offset + 2] << 8)  |  buf[offset + 3] ))
+}
+
+# uint32_to buf value
+uint32_to() {
+    local -n buf=$1
+    local -i value=$2
+    buf+=($((value >> 24 & 0xff)))
+    buf+=($((value >> 16 & 0xff)))
+    buf+=($((value >> 8 & 0xff)))
+    buf+=($((value & 0xff)))
+}
+
+# string_from buf offsetvar outvar
+string_from() {
+    local -n buf=$1
+    local -n offset=$2
+    local -n string_out=$3
+    local -i len
+    uint32_from $1 $offset len
+    (( offset += 4 ))
+    local hexed
+    printf -v hexed '\\x%02x' ${buf[@]:offset:len}
+    printf -v string_out "$hexed"
+    (( offset += len ))
+}
+
+# string_to buf value
+string_to() {
+    local -n buf=$1
+    local value="$2"
+    local -i byte
+    uint32_to $1 ${#value}
+    for (( i = 0; i < ${#value}; i++ )); do
+        printf -v byte '%d' "'${value:i:1}"
+        buf+=($byte)
+    done
+}
+
+# bash strings cannot contain null bytes. for strings in the SSH protocol
+# with binary data inside, use "bytearray"
+
+# bytearray_from buf offsetvar arr
+bytearray_from() {
+    local -n buf=$1
+    local -n offset=$2
+    local -n bytearray_out=$3
+    local -i len
+    uint32_from $1 $offset len
+    (( offset += 4 ))
+    bytearray_out=(${buf[@]:offset:len})
+    (( offset += len ))
+}
+
+# bytearray_to buf arr
+bytearray_to() {
+    local -n buf=$1 arr=$2
+    uint32_to $1 ${#arr[@]}
+    buf+=("${arr[@]}")
+}
+
+# namelist_from buf offsetvar outvar
+namelist_from() {
+    local str
+    string_from "$1" "$2" str
+    local -n namelist_out="$3"
+    local IFS=,
+    namelist_out=($str)
+}
+
+# namelist_to buf arr
+namelist_to() {
+    local -n arr=$2
+    local str
+    printf -v str "%s," "${arr[@]}"
+    string_to $1 "${str%,}"
+}
 
 # == RFC4253, 6. Binary Packet Protocol
 
@@ -101,68 +192,6 @@ read_bytes() {
     done
 }
 
-# uint32_from buf offset outvar
-uint32_from() {
-    local -n buf=$1
-    local -i offset=$2
-    local -n num_out=$3
-    (( num_out = (buf[offset + 0] << 24) | (buf[offset + 1] << 16) \
-               | (buf[offset + 2] << 8)  |  buf[offset + 3] ))
-}
-
-# uint32_to buf value
-uint32_to() {
-    local -n buf=$1
-    local -i value=$2
-    buf+=($((value >> 24 & 0xff)))
-    buf+=($((value >> 16 & 0xff)))
-    buf+=($((value >> 8 & 0xff)))
-    buf+=($((value & 0xff)))
-}
-
-# string_from buf offsetvar outvar
-string_from() {
-    local -n buf=$1
-    local -n offset=$2
-    local -n string_out=$3
-    local -i len
-    uint32_from $1 $offset len
-    (( offset += 4 ))
-    local hexed
-    printf -v hexed '\\x%02x' ${buf[@]:offset:len}
-    printf -v string_out "$hexed"
-    (( offset += len ))
-}
-
-# string_to buf value
-string_to() {
-    local -n buf=$1
-    local value="$2"
-    local -i byte
-    uint32_to $1 ${#value}
-    for (( i = 0; i < ${#value}; i++ )); do
-        printf -v byte '%d' "'${value:i:1}"
-        buf+=($byte)
-    done
-}
-
-# namelist_from buf offsetvar outvar
-namelist_from() {
-    local str
-    string_from "$1" "$2" str
-    local -n namelist_out="$3"
-    local IFS=,
-    namelist_out=($str)
-}
-
-# namelist_to buf arr
-namelist_to() {
-    local -n arr=$2
-    local str
-    printf -v str "%s," "${arr[@]}"
-    string_to $1 "${str%,}"
-}
-
 receive_packet() {
     local -ai ciphertext plaintext
     local -n received=ciphertext
@@ -192,7 +221,7 @@ send_packet() {
     #   Arbitrary-length padding, such that the total length of
     #   (packet_length || padding_length || payload || random padding)
     #   is a multiple of the cipher block size or 8, whichever is
-    #   larger.  There MUST be at least four bytes of padding.  The
+    #   larger.  There MUST be at least four bytes of padding.
     #
     #               ~ RFC4253, 6. Binary Packet Protocol
     # 
@@ -263,6 +292,8 @@ parse_kexinit() {
     if (( pos + 5 != ${#packet_data[@]} )); then
         fatal "malformed SSH_MSG_KEXINIT (excess bytes)"
     fi
+
+    server_kexinit=(${packet_data[@]})
 }
 
 send_kexinit() {
@@ -293,6 +324,7 @@ send_kexinit() {
 
     # reserved
     packet_data+=(0 0 0 0)
+    client_kexinit=(${packet_data[@]})
     send_packet
 }
 
@@ -354,7 +386,6 @@ parse_kexinit
 #      there is a signature-capable algorithm on the server's
 #      server_host_key_algorithms that is also supported by the
 #      client.
-#
 #                   ~ RFC4253, 7.1. Algorithm Negotiation
 #
 # We do this by simply implementing only kex algorithms that require
@@ -373,3 +404,74 @@ if ! array_contains compression_algorithms_client_to_server none || \
 then
     fatal "server insists on compression, which we do not support"
 fi
+
+#   After receiving the SSH_MSG_KEXINIT packet from the other side,
+#   each party will know whether their guess was right.  If the
+#   other party's guess was wrong, and this field was TRUE, the
+#   next packet MUST be silently ignored, and both sides MUST then
+#   act as determined by the negotiated key exchange method.  If
+#   the guess was right, key exchange MUST continue using the
+#   guessed packet.
+#
+#                   ~ RFC4253, 7.1. Algorithm Negotiation
+if (( first_kex_packet_follows )) && \
+    [[ "$kex_algorithm" != "${kex_algorithms[0]}" ]]
+then
+    receive_packet
+fi
+
+# == RFC5656, 4. ECDH Key Exchange
+send_ecdh_init() {
+    local -n received=ephemeral_sk
+    read_bytes 32 $urandom
+
+    local -a x25519_k=(${ephemeral_sk[@]})
+    local -a x25519_u=(${x25519_basepoint[@]})
+    local -n x25519_out=ephemeral_pk
+    x25519
+
+    local -ai packet_data=()
+    packet_data[0]=SSH_MSG_KEX_ECDH_INIT
+    bytearray_to packet_data ephemeral_pk
+    send_packet
+}
+
+parse_ecdh_reply() {
+    if (( packet_data[0] != SSH_MSG_KEX_ECDH_REPLY )); then
+        fatal "unexpected packet type (expected SSH_MSG_KEX_ECDH_REPLY, got %d)" ${packet_data[0]}
+    fi
+    local -i pos=1
+    bytearray_from packet_data pos host_key
+    bytearray_from packet_data pos server_ephemeral_key
+    bytearray_from packet_data pos kex_signature
+
+    if (( pos != ${#packet_data[@]} )); then
+        fatal "malformed SSH_MSG_KEX_ECDH_REPLY (excess bytes)"
+    fi
+
+    if (( ${#server_ephemeral_key[@]} != 32 )); then
+        fatal "invalid length for server_ephemeral_key: %d" ${#server_ephemeral_key}
+    fi
+
+    local -a x25519_k=(${ephemeral_sk[@]})
+    local -a x25519_u=(${server_ephemeral_key})
+    local -n x25519_out=shared_secret
+    x25519
+
+    local -ai summary=()
+    string_to summary "$client_version"
+    string_to summary "$server_version"
+    bytearray_to summary client_kexinit
+    bytearray_to summary server_kexinit
+    bytearray_to summary host_key
+    bytearray_to summary ephemeral_pk
+    bytearray_to summary server_ephemeral_key
+    sha256_init
+    sha256_update "${summary[@]}"
+    sha256_finish
+    declare -p sha256_out
+}
+
+send_ecdh_init
+receive_packet
+parse_ecdh_reply

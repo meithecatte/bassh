@@ -1,6 +1,10 @@
 set -u
 . field25519.sh
 
+declare -ai x25519_basepoint=(
+    9 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+)
+
 swap() {
     local i a=$1 b=$2
     for (( i = 0; i < 10; i++ )); do
