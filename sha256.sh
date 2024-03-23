@@ -118,7 +118,7 @@ sha256_finish() {
     done
     sha256_update "${padding[@]}"
 
-    sha256_output=()
+    sha256_out=()
     for i in {0..7}; do
         ((
             sha256_out[4*i] = (sha256_h[i] >> 24) & 0xff,

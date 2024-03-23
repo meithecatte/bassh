@@ -135,7 +135,7 @@ sha512_finish() {
     done
     sha512_update "${padding[@]}"
 
-    sha512_output=()
+    sha512_out=()
     for i in {0..7}; do
         ((
             sha512_out[8*i] = (sha512_h[i] >> 56) & 0xff,
