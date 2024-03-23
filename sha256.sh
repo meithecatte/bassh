@@ -21,7 +21,7 @@ declare -ai sha256_k=(
    0x90befffa 0xa4506ceb 0xbef9a3f7 0xc67178f2
 )
 
-ror() {
+ror32() {
     echo "($1 >> $2 | $1 << $((32 - $2)) & $((2**32 - 1)))"
 }
 
@@ -62,8 +62,8 @@ sha256_compress() {
     done
     for i in {16..63}; do
         ((
-            s0 = $(ror w[i-15] 7) ^ $(ror w[i-15] 18) ^ (w[i-15] >> 3),
-            s1 = $(ror w[i-2] 17) ^ $(ror w[i-2] 19) ^ (w[i-2] >> 10),
+            s0 = $(ror32 w[i-15] 7) ^ $(ror32 w[i-15] 18) ^ (w[i-15] >> 3),
+            s1 = $(ror32 w[i-2] 17) ^ $(ror32 w[i-2] 19) ^ (w[i-2] >> 10),
             w[i] = (w[i-16] + s0 + w[i-7] + s1) & $((2**32 - 1))
         ))
     done
@@ -71,10 +71,10 @@ sha256_compress() {
        e = sha256_h[4], f = sha256_h[5], g = sha256_h[6], h = sha256_h[7] ))
     for i in {0..63}; do
         ((
-            s1 = $(ror e 6) ^ $(ror e 11) ^ $(ror e 25),
+            s1 = $(ror32 e 6) ^ $(ror32 e 11) ^ $(ror32 e 25),
             ch = (e & f) ^ (~e & g),
             t1 = h + s1 + ch + sha256_k[i] + w[i],
-            s0 = $(ror a 2) ^ $(ror a 13) ^ $(ror a 22),
+            s0 = $(ror32 a 2) ^ $(ror32 a 13) ^ $(ror32 a 22),
             maj = (a & b) ^ (a & c) ^ (b & c),
             t2 = s0 + maj,
 
